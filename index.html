@@ -326,9 +326,7 @@ async function createShare(){
  const url=new URL('/share/'+encodeURIComponent(token),location.origin).href;
  data.shares=data.shares||[];data.shares.push({id:token,created:new Date().toISOString(),items:items.map(x=>x.id),revoked:false,url});saveLocalOnly();renderShares();
  try{await navigator.clipboard.writeText(url);}catch(_){ }
- alert('Share URL created and copied:
-
-'+url);
+ alert('Share URL created and copied:\n\n'+url);
 }
 async function revokeShare(id){
  if(!currentSession)return alert('Connect your Supabase account first.');
