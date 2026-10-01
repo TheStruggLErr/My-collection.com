@@ -166,14 +166,14 @@ nav button:hover,nav button.active{background:var(--accent);color:#fff}
 <script>
 const SUPABASE_URL='https://lhyzdeytmuztdhympry.supabase.co';
 const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxoeWpkZXl0bXV6dGRoeW15cHJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MTk4MjMsImV4cCI6MjEwNjA5NTgyM30.-SKzXu1NvuzYXOpVQhwsg-FXNn6az3ZX55tIexaX68o';
-const supabase=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 let currentSession=null;
 const cloudStatus=()=>{const e=document.getElementById('cloudStatus');if(e)e.textContent=currentSession?`Connected as ${currentSession.user.email}`:'Not connected';};
-async function refreshSession(){const {data}=await supabase.auth.getSession();currentSession=data.session;cloudStatus();return currentSession;}
-async function signInCloud(){const email=document.getElementById('cloudEmail').value.trim(),password=document.getElementById('cloudPassword').value; if(!email||!password)return alert('Enter your email and password.'); const {data,error}=await supabase.auth.signInWithPassword({email,password}); if(error)return alert(error.message); currentSession=data.session; cloudStatus(); await syncLocalToCloud(); await pullCloudProducts(); renderAll(); alert('Connected to My Collection cloud storage.');}
-async function signOutCloud(){await supabase.auth.signOut();currentSession=null;cloudStatus();alert('Signed out of cloud storage. Local browser data remains available.');}
-async function syncLocalToCloud(){if(!currentSession)return; const rows=data.items.map(x=>({id:x.cloudId||crypto.randomUUID(),owner_id:currentSession.user.id,name:x.name,category:x.category,subcategory:x.sub||null,colour:x.colour||null,status:x.status||null,price:Number(x.price||0),purchase_date:x.acquiredDate||null,month:x.month||null,budget:x.budgetId||null,link:x.link||null,notes:x.notes||null,image:x.image||null})); if(rows.length){const {error}=await supabase.from('products').upsert(rows,{onConflict:'id'}); if(error){console.error(error);return alert('Cloud sync error: '+error.message);} rows.forEach(r=>{const local=data.items.find(x=>x.cloudId===r.id||(!x.cloudId&&x.name===r.name&&x.owner_id===currentSession.user.id));if(local)local.cloudId=r.id;}); saveLocalOnly();}}
-async function pullCloudProducts(){if(!currentSession)return; const {data:rows,error}=await supabase.from('products').select('*').eq('owner_id',currentSession.user.id).order('created_at',{ascending:true}); if(error)return console.error(error); const mapped=rows.map(r=>({id:Date.now()+Math.floor(Math.random()*100000),cloudId:r.id,name:r.name,category:r.category||'Wardrobe',sub:r.subcategory||'',colour:r.colour||'',status:r.status||'Owned',price:Number(r.price||0),month:r.month||'Other',acquiredDate:r.purchase_date||'',budgetId:r.budget||'',link:r.link||'',notes:r.notes||'',image:r.image||'',created:r.created_at})); data.items=mapped; saveLocalOnly();}
+async function refreshSession(){const {data}=await sb.auth.getSession();currentSession=data.session;cloudStatus();return currentSession;}
+async function signInCloud(){const email=document.getElementById('cloudEmail').value.trim(),password=document.getElementById('cloudPassword').value; if(!email||!password)return alert('Enter your email and password.'); const {data,error}=await sb.auth.signInWithPassword({email,password}); if(error)return alert(error.message); currentSession=data.session; cloudStatus(); await syncLocalToCloud(); await pullCloudProducts(); renderAll(); alert('Connected to My Collection cloud storage.');}
+async function signOutCloud(){await sb.auth.signOut();currentSession=null;cloudStatus();alert('Signed out of cloud storage. Local browser data remains available.');}
+async function syncLocalToCloud(){if(!currentSession)return; const rows=data.items.map(x=>({id:x.cloudId||crypto.randomUUID(),owner_id:currentSession.user.id,name:x.name,category:x.category,subcategory:x.sub||null,colour:x.colour||null,status:x.status||null,price:Number(x.price||0),purchase_date:x.acquiredDate||null,month:x.month||null,budget:x.budgetId||null,link:x.link||null,notes:x.notes||null,image:x.image||null})); if(rows.length){const {error}=await sb.from('products').upsert(rows,{onConflict:'id'}); if(error){console.error(error);return alert('Cloud sync error: '+error.message);} rows.forEach(r=>{const local=data.items.find(x=>x.cloudId===r.id||(!x.cloudId&&x.name===r.name&&x.owner_id===currentSession.user.id));if(local)local.cloudId=r.id;}); saveLocalOnly();}}
+async function pullCloudProducts(){if(!currentSession)return; const {data:rows,error}=await sb.from('products').select('*').eq('owner_id',currentSession.user.id).order('created_at',{ascending:true}); if(error)return console.error(error); const mapped=rows.map(r=>({id:Date.now()+Math.floor(Math.random()*100000),cloudId:r.id,name:r.name,category:r.category||'Wardrobe',sub:r.subcategory||'',colour:r.colour||'',status:r.status||'Owned',price:Number(r.price||0),month:r.month||'Other',acquiredDate:r.purchase_date||'',budgetId:r.budget||'',link:r.link||'',notes:r.notes||'',image:r.image||'',created:r.created_at})); data.items=mapped; saveLocalOnly();}
 function saveLocalOnly(){localStorage.setItem(KEY,JSON.stringify(data));DBPromise.then(db=>{if(!db)return;const tx=db.transaction('snapshots','readwrite');tx.objectStore('snapshots').put({id:'latest',savedAt:new Date().toISOString(),data});});}
 const KEY='myCollectionV1';
 let data=JSON.parse(localStorage.getItem(KEY)||'{"items":[],"outfits":[],"orders":[]}');
@@ -317,12 +317,12 @@ async function createShare(){
  const items=data.items.filter(x=>selectedShare.has(x.id));
  if(!items.length)return alert('Select at least one product.');
  const token='SHARE-'+Date.now()+Math.floor(Math.random()*1000);
- const {data:share,error}=await supabase.from('share_links').insert({share_token:token,owner_id:currentSession.user.id,active:true}).select().single();
+ const {data:share,error}=await sb.from('share_links').insert({share_token:token,owner_id:currentSession.user.id,active:true}).select().single();
  if(error)return alert('Could not create share link: '+error.message);
  const rows=items.map(x=>({share_id:share.id,product_id:x.cloudId}));
  if(rows.some(x=>!x.product_id)){return alert('One or more products are not synced yet. Connect & sync again, then retry.');}
- const {error:linkError}=await supabase.from('shared_products').insert(rows);
- if(linkError){await supabase.from('share_links').delete().eq('id',share.id);return alert('Could not attach products: '+linkError.message);}
+ const {error:linkError}=await sb.from('shared_products').insert(rows);
+ if(linkError){await sb.from('share_links').delete().eq('id',share.id);return alert('Could not attach products: '+linkError.message);}
  const url=new URL('/share/'+encodeURIComponent(token),location.origin).href;
  data.shares=data.shares||[];data.shares.push({id:token,created:new Date().toISOString(),items:items.map(x=>x.id),revoked:false,url});saveLocalOnly();renderShares();
  try{await navigator.clipboard.writeText(url);}catch(_){ }
@@ -330,7 +330,7 @@ async function createShare(){
 }
 async function revokeShare(id){
  if(!currentSession)return alert('Connect your Supabase account first.');
- const {error}=await supabase.from('share_links').update({active:false}).eq('share_token',id).eq('owner_id',currentSession.user.id);
+ const {error}=await sb.from('share_links').update({active:false}).eq('share_token',id).eq('owner_id',currentSession.user.id);
  if(error)return alert(error.message);
  const x=(data.shares||[]).find(s=>s.id===id);if(x)x.revoked=true;saveLocalOnly();renderShares();
 }
@@ -345,7 +345,7 @@ async function loadPublicShare(){
  document.querySelector('.app').style.display='none';
  const token=decodeURIComponent(m[1]);
  const box=document.createElement('div');box.style.cssText='min-height:100vh;padding:40px;background:var(--bg);color:var(--text)';box.innerHTML='<div style="max-width:1100px;margin:auto"><h1 style="margin:0 0 8px">Shared Collection</h1><p class="label">Read-only products shared with you.</p><div id="publicShareItems" class="items" style="margin-top:24px"><div class="empty">Loading shared products…</div></div></div>';document.body.appendChild(box);
- const {data:rows,error}=await supabase.rpc('get_shared_products',{p_token:token});
+ const {data:rows,error}=await sb.rpc('get_shared_products',{p_token:token});
  const el=document.getElementById('publicShareItems');
  if(error){el.innerHTML='<div class="empty">This share link is unavailable or expired.</div>';return true;}
  el.innerHTML=rows?.length?rows.map(r=>`<div class="item"><h3>${esc(r.name)}</h3><div class="meta">${esc(r.category||'')} · ${esc(r.subcategory||'')}<br>${esc(r.status||'')} · ${esc(r.month||'')}</div><div class="price">${money(r.price)}</div>${r.notes?`<p class="label">${esc(r.notes)}</p>`:''}${r.link?`<p><a href="${esc(r.link)}" target="_blank" rel="noopener">Product/resource link</a></p>`:''}</div>`).join(''):'<div class="empty">No products are attached to this share link.</div>';
