@@ -28,6 +28,7 @@ nav button:hover,nav button.active{background:var(--accent);color:#fff}
 @media(max-width:900px){.side{width:210px}.main{margin-left:210px}.cards{grid-template-columns:repeat(2,1fr)}.items{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:650px){.modalbox form{grid-template-columns:1fr!important}.modalbox{padding:18px}.side{position:static;width:100%;height:auto;border-right:0;border-bottom:1px solid var(--line)}.app{display:block}.main{margin-left:0;padding:18px}.cards,.items,.grid{grid-template-columns:1fr}.top{align-items:flex-start;gap:10px}.side nav{display:grid;grid-template-columns:repeat(2,1fr)}}
 .modalbox form > div::-webkit-scrollbar{width:8px}.modalbox form > div::-webkit-scrollbar-track{background:#e3dcc8;border-radius:8px}.modalbox form > div::-webkit-scrollbar-thumb{background:#9aa277;border-radius:8px}.modalbox form > div::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+.product-image{display:block;width:100%;height:210px;object-fit:cover;border-radius:12px;margin:0 0 12px;background:#e9e2d2}.image-preview{max-width:100%;max-height:220px;object-fit:contain;border-radius:10px;display:none;margin-top:8px}.image-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
 @media(max-width:700px){.modalbox form > div>div>div{grid-template-columns:1fr!important}.modalbox{max-height:94vh}.modalbox form>div{max-height:66vh}}
 </style>
 </head>
@@ -150,6 +151,13 @@ nav button:hover,nav button.active{background:var(--accent);color:#fff}
     <div id="historicalBudgetHint" class="label" style="display:none;margin-top:10px;padding:10px;background:#e8e1cd;border-radius:9px">This product was bought before October 2026. You can assign it to any budget.</div>
   </div>
   <div class="section" style="box-shadow:none;margin-bottom:14px">
+    <h2>Product image</h2>
+    <label>Choose an image<input id="fImage" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onchange="previewProductImage(event)"></label>
+    <img id="fImagePreview" class="image-preview" alt="Selected product image preview">
+    <div class="image-controls"><button type="button" class="smallbtn" onclick="clearProductImage()">Remove image</button><span id="imageUploadHint" class="label">Connect to Supabase in Settings to upload and sync product images (maximum 5 MB).</span></div>
+    <input id="fImageRemove" type="hidden" value="0">
+  </div>
+  <div class="section" style="box-shadow:none;margin-bottom:14px">
     <h2>Links & notes</h2>
     <div style="display:grid;gap:12px">
       <label>Shopping / resource link<input id="fLink" type="url" placeholder="https://..."></label>
@@ -183,14 +191,22 @@ const save=()=>{saveLocalOnly(); if(currentSession) syncLocalToCloud();};
 function nav(){
  document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById(b.dataset.page).classList.add('active');renderAll();});
 }
-function openModal(cat='Wardrobe'){document.getElementById('modal').classList.add('open');document.getElementById('fCategory').value=cat;document.getElementById('modalTitle').textContent='Add item';document.getElementById('fId').value='';document.getElementById('fPrice').value=0}
+function openModal(cat='Wardrobe'){document.getElementById('modal').classList.add('open');document.getElementById('fCategory').value=cat;document.getElementById('modalTitle').textContent='Add item';document.getElementById('fId').value='';document.getElementById('fPrice').value=0;document.getElementById('fImage').value='';document.getElementById('fImageRemove').value='0';showImagePreview('')}
 function closeModal(){document.getElementById('modal').classList.remove('open')}
 function budgetDateRule(){return true;}
-function saveItem(e){
+function showImagePreview(url){const img=document.getElementById('fImagePreview');img.src=url||'';img.style.display=url?'block':'none'}
+function previewProductImage(e){const file=e.target.files?.[0];if(!file){showImagePreview('');return}if(!/^image\/(jpeg|png|webp|gif)$/.test(file.type)||file.size>5*1024*1024){alert('Choose a JPEG, PNG, WebP or GIF image up to 5 MB.');e.target.value='';return}document.getElementById('fImageRemove').value='0';showImagePreview(URL.createObjectURL(file))}
+function clearProductImage(){document.getElementById('fImage').value='';document.getElementById('fImageRemove').value='1';showImagePreview('')}
+async function uploadProductImage(file){if(!currentSession)throw new Error('Connect your Supabase account in Settings before uploading an image.');if(!/^image\/(jpeg|png|webp|gif)$/.test(file.type)||file.size>5*1024*1024)throw new Error('Choose a JPEG, PNG, WebP or GIF image up to 5 MB.');const ext={'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/gif':'gif'}[file.type];const path=`${currentSession.user.id}/${crypto.randomUUID()}.${ext}`;const {error}=await sb.storage.from('product-images').upload(path,file,{upsert:false,contentType:file.type});if(error)throw error;return sb.storage.from('product-images').getPublicUrl(path).data.publicUrl}
+async function saveItem(e){
  if(!ensureOwner())return;
  e.preventDefault();
  const id=Number(fId.value);
- const payload={name:fName.value,category:fCategory.value,sub:fSub.value,colour:fColour.value,price:+fPrice.value||0,status:fStatus.value,month:fMonth.value,acquiredDate:fDate.value,budgetId:fBudget.value||'',link:fLink.value,notes:fNotes.value};
+ const previous=id?data.items.find(x=>x.id===id):null;
+ let image=document.getElementById('fImageRemove').value==='1'?'':(previous?.image||'');
+ const imageFile=document.getElementById('fImage').files?.[0];
+ if(imageFile){try{image=await uploadProductImage(imageFile)}catch(err){alert('Image upload failed: '+(err.message||err));return}}
+ const payload={name:fName.value,category:fCategory.value,sub:fSub.value,colour:fColour.value,price:+fPrice.value||0,status:fStatus.value,month:fMonth.value,acquiredDate:fDate.value,budgetId:fBudget.value||'',link:fLink.value,notes:fNotes.value,image};
  if(id){
    const idx=data.items.findIndex(x=>x.id===id);
    if(idx>-1) data.items[idx]={...data.items[idx],...payload};
@@ -205,12 +221,12 @@ function editItem(id){
  openModal(x.category); modalTitle.textContent='Edit product';
  fId.value=x.id; fName.value=x.name||''; fCategory.value=x.category||'Wardrobe'; fSub.value=x.sub||'';
  fColour.value=x.colour||''; fPrice.value=x.price||0; fStatus.value=x.status||'Owned'; fMonth.value=x.month||'Other';
- fDate.value=x.acquiredDate||''; fLink.value=x.link||''; fNotes.value=x.notes||'';
+ fDate.value=x.acquiredDate||''; fLink.value=x.link||''; fNotes.value=x.notes||'';fBudget.value=x.budgetId||'';showImagePreview(x.image||'');document.getElementById('fImageRemove').value='0';
 }
 
 function matches(item,q){q=(q||'').toLowerCase();return !q||[item.name,item.sub,item.colour,item.status].join(' ').toLowerCase().includes(q)}
 function card(item){
- return `<div class="item"><h3>${esc(item.name)}</h3><div class="meta">${esc(item.sub||item.category)}${item.colour?' · '+esc(item.colour):''}<br>${esc(item.status)}${item.month?' · '+esc(item.month):''}${item.acquiredDate?' · '+esc(item.acquiredDate):''}</div><div class="price">${money(item.price)}</div>${item.budgetId?`<div class="meta" style="margin-top:5px">Budget: ${esc((data.budgets||[]).find(b=>Number(b.id)===Number(item.budgetId))?.name||'')}</div>`:''}${item.link?`<a href="${esc(item.link)}" target="_blank" style="color:var(--accent);font-size:13px">Open link ↗</a>`:''}${item.notes?`<div class="meta" style="margin-top:6px">${esc(item.notes)}</div>`:''}<div style="margin-top:12px"><button class="smallbtn" onclick="editItem(${item.id})">Edit</button> <button class="smallbtn dangerbtn" onclick="removeItem(${item.id})">Delete</button></div></div>`
+ return `<div class="item">${item.image?`<img class="product-image" src="${esc(item.image)}" alt="${esc(item.name)}" loading="lazy">`:''}<h3>${esc(item.name)}</h3><div class="meta">${esc(item.sub||item.category)}${item.colour?' · '+esc(item.colour):''}<br>${esc(item.status)}${item.month?' · '+esc(item.month):''}${item.acquiredDate?' · '+esc(item.acquiredDate):''}</div><div class="price">${money(item.price)}</div>${item.budgetId?`<div class="meta" style="margin-top:5px">Budget: ${esc((data.budgets||[]).find(b=>Number(b.id)===Number(item.budgetId))?.name||'')}</div>`:''}${item.link?`<a href="${esc(item.link)}" target="_blank" style="color:var(--accent);font-size:13px">Open link ↗</a>`:''}${item.notes?`<div class="meta" style="margin-top:6px">${esc(item.notes)}</div>`:''}<div style="margin-top:12px"><button class="smallbtn" onclick="editItem(${item.id})">Edit</button> <button class="smallbtn dangerbtn" onclick="removeItem(${item.id})">Delete</button></div></div>`
 }
 function esc(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function renderCategory(cat){
@@ -307,7 +323,7 @@ function renderSharePicker(){
  const el=document.getElementById('sharePicker');if(!el)return;
  const q=(document.getElementById('shareSearch')?.value||'').toLowerCase();
  const arr=data.items.filter(x=>[x.name,x.category,x.sub,x.colour,x.status,x.month].join(' ').toLowerCase().includes(q));
- el.innerHTML=arr.length?arr.map(x=>`<div class="item"><label style="display:flex;gap:10px"><input type="checkbox" ${selectedShare.has(x.id)?'checked':''} onchange="toggleShare(${x.id},this.checked)"><span><h3>${esc(x.name)}</h3><div class="meta">${esc(x.category)} · ${esc(x.sub||'')}<br>${esc(x.status)} · ${esc(x.month||'')}</div><div class="price">${money(x.price)}</div></span></label></div>`).join(''):'<div class="empty">No products found.</div>';
+ el.innerHTML=arr.length?arr.map(x=>`<div class="item">${x.image?`<img class="product-image" src="${esc(x.image)}" alt="${esc(x.name)}" loading="lazy">`:''}<label style="display:flex;gap:10px"><input type="checkbox" ${selectedShare.has(x.id)?'checked':''} onchange="toggleShare(${x.id},this.checked)"><span><h3>${esc(x.name)}</h3><div class="meta">${esc(x.category)} · ${esc(x.sub||'')}<br>${esc(x.status)} · ${esc(x.month||'')}</div><div class="price">${money(x.price)}</div></span></label></div>`).join(''):'<div class="empty">No products found.</div>';
 }
 function toggleShare(id,on){on?selectedShare.add(id):selectedShare.delete(id)}
 function selectAllShare(){data.items.forEach(x=>selectedShare.add(x.id));renderSharePicker()}
@@ -348,7 +364,7 @@ async function loadPublicShare(){
  const {data:rows,error}=await sb.rpc('get_shared_products',{p_token:token});
  const el=document.getElementById('publicShareItems');
  if(error){el.innerHTML='<div class="empty">This share link is unavailable or expired.</div>';return true;}
- el.innerHTML=rows?.length?rows.map(r=>`<div class="item"><h3>${esc(r.name)}</h3><div class="meta">${esc(r.category||'')} · ${esc(r.subcategory||'')}<br>${esc(r.status||'')} · ${esc(r.month||'')}</div><div class="price">${money(r.price)}</div>${r.notes?`<p class="label">${esc(r.notes)}</p>`:''}${r.link?`<p><a href="${esc(r.link)}" target="_blank" rel="noopener">Product/resource link</a></p>`:''}</div>`).join(''):'<div class="empty">No products are attached to this share link.</div>';
+ el.innerHTML=rows?.length?rows.map(r=>`<div class="item">${r.image?`<img class="product-image" src="${esc(r.image)}" alt="${esc(r.name)}" loading="lazy">`:''}<h3>${esc(r.name)}</h3><div class="meta">${esc(r.category||'')} · ${esc(r.subcategory||'')}<br>${esc(r.status||'')} · ${esc(r.month||'')}</div><div class="price">${money(r.price)}</div>${r.notes?`<p class="label">${esc(r.notes)}</p>`:''}${r.link?`<p><a href="${esc(r.link)}" target="_blank" rel="noopener">Product/resource link</a></p>`:''}</div>`).join(''):'<div class="empty">No products are attached to this share link.</div>';
  return true;
 }
 function renderSearchResults(){
